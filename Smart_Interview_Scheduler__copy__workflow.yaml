@@ -1,0 +1,152 @@
+version: '1.0'
+blocks:
+  c975c5da-d1b7-449b-aa4f-93a2b421a79d:
+    type: starter
+    name: Start
+    inputs:
+      startWorkflow: manual
+    connections:
+      success:
+        - 56241923-2c3b-472e-b2e9-6b286a727338
+        - 0493ed34-fa2e-434f-a70d-6155d084f445
+        - 58ef3f76-880c-4ad8-a179-6a06dcc38830
+  288eb75f-4ccb-4cf5-91bf-da2a482932df:
+    type: loop
+    name: Loop 1
+    inputs:
+      count: 5
+      loopType: forEach
+      collection: |
+        <agent1.content>
+    connections:
+      loop:
+        start: a8934b82-65ae-4dd0-bf2f-ed1cf2bfd497
+  58ef3f76-880c-4ad8-a179-6a06dcc38830:
+    type: google_sheets
+    name: Google Sheets 1
+    inputs:
+      operation: read
+    connections:
+      success: b86756b7-fdef-4a17-9f8f-b9f260c32c25
+  0493ed34-fa2e-434f-a70d-6155d084f445:
+    type: function
+    name: GetEndDateTime
+    inputs:
+      code: |-
+        //gets this weeks events
+        const startDate = new Date();
+        const endDate = new Date(startDate);    endDate.setDate(startDate.getDate() + 7);
+        return endDate
+    connections:
+      success: 511864e2-f310-4ee0-9ad3-1cc01399ef04
+  2b6bae78-1822-49db-98d8-235ca9897ee8:
+    type: function
+    name: Prep Link
+    inputs:
+      code: |-
+        const prep_link = "https://example";
+
+        return prep_link;
+    connections:
+      success: 288eb75f-4ccb-4cf5-91bf-da2a482932df
+  511864e2-f310-4ee0-9ad3-1cc01399ef04:
+    type: google_calendar
+    name: Google Calendar 1
+    inputs:
+      operation: list
+      timeMin: <getstartdatetime.result>
+      timeMax: <getenddatetime.result>
+      sendUpdates: all
+    connections:
+      success: b86756b7-fdef-4a17-9f8f-b9f260c32c25
+  a8934b82-65ae-4dd0-bf2f-ed1cf2bfd497:
+    type: gmail
+    name: Gmail 1
+    inputs:
+      operation: send_gmail
+      to: <loop.currentItem.candidateEmail>
+      subject: Interview Selection
+      body: |-
+        Dear <loop.currentItem.candidateName>,
+
+        You have been selected for an interview, here is the link for the interview prep materials. 
+
+        <preplink.result>
+
+        You will receive another email with the interview details soon . Keep a lookout for it in your inbox or spam. 
+
+        Best,
+        <companyname.result>
+    connections:
+      success: d11f8b74-694e-4216-b149-feed5f70ced6
+    parentId: 288eb75f-4ccb-4cf5-91bf-da2a482932df
+  55d651a3-07d6-4a4c-8c29-e193e92eeb31:
+    type: function
+    name: Company Name
+    inputs:
+      code: |-
+        const company_name = "ABC Company";
+
+        return company_name;
+    connections:
+      success: 288eb75f-4ccb-4cf5-91bf-da2a482932df
+  56241923-2c3b-472e-b2e9-6b286a727338:
+    type: function
+    name: GetStartDateTime
+    inputs:
+      code: |-
+        //gets this weeks events
+        const startDate = new Date();
+        return startDate
+    connections:
+      success: 511864e2-f310-4ee0-9ad3-1cc01399ef04
+  d11f8b74-694e-4216-b149-feed5f70ced6:
+    type: google_calendar
+    name: Google Calendar 2
+    inputs:
+      operation: create
+      summary: Interview with Candidate
+      startDateTime: <loop.currentItem.startTime>
+      endDateTime: <loop.currentItem.endTime>
+      attendees: <loop.currentItem.candidateEmail>
+      sendUpdates: all
+    parentId: 288eb75f-4ccb-4cf5-91bf-da2a482932df
+  b86756b7-fdef-4a17-9f8f-b9f260c32c25:
+    type: agent
+    name: Agent 1
+    inputs:
+      systemPrompt: |-
+        Role:
+        You are an Interview Scheduler.
+
+        Inputs:
+
+        1. Google Calendar metadata: \<googlecalendar1.metadata> = recruiter’s booked slots.
+        2. Google Sheets = selected candidates (only name and email). <googlesheets1.data>
+        3. User prompt (optional): may include office timings or lunch break.
+
+        Rules:
+
+        1. Office hours = user prompt, otherwise 09:00–17:00 local time.
+        2. Lunch break = user prompt, otherwise 13:00–14:00 local time.
+        3. Exclude weekends, lunch, and existing calendar events.
+        4. Each interview = 1 hour (unless prompt specifies otherwise).
+        5. Add a mandatory 15-minute buffer after each interview.
+        6. Start scheduling from <getstartdatetime.result>, end by <getenddatetime.result>.
+        7. Assign interviews in chronological order, spreading across valid weekdays if needed.
+        8. No overlaps, duplicates, or assignments outside working hours. Each candidate must have a unique slot.
+        9. If a conflict arises, move to the next valid time on the same day or next workday.
+
+        Output Format: 
+        1. Return ONLY an array of possible interview timings, in chronological order.
+         2. Each element must be an object with keys "candidateName", "candidateEmail", "startTime" and "endTime".
+         3, Each value must be in the format "YYYY-MM-DDTHH:mm:ss.sssZ" (UTC, with milliseconds). 
+        4. The array length must equal the number of candidates. 
+        5. No reasoning, no explanations, no formatting AT ALL.
+      userPrompt: spread the interviews over a week
+      model: gpt-4o
+      tools: []
+    connections:
+      success:
+        - 55d651a3-07d6-4a4c-8c29-e193e92eeb31
+        - 2b6bae78-1822-49db-98d8-235ca9897ee8
